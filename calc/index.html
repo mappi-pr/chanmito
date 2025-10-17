@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>料金シミュレータ</title>
+<link rel="stylesheet" href="main.css">
+</head>
+<body>
+
+<h1>料金シミュレータ</h1>
+
+<div class="section" id="timeSection">
+  <div id="stayTimeDisplay">入店時刻: <span id="startTimeDisplay">未設定</span>（経過 <span id="stayMinutes">0</span> 分）</div>
+  <div class="flex-row" style="justify-content:center;">
+    <button id="enterBtn" class="btn-large green-button">🚪 入店する</button>
+    <button id="editTimeBtn" class="btn-large">📝 時刻を編集</button>
+  </div>
+</div>
+
+<div id="editTimeSection" class="section" style="display:none;">
+  <label for="manualTimeInput">入店時刻を編集（HH:MM）</label>
+  <input type="time" id="manualTimeInput" />
+  <div class="time-buttons">
+    <button id="saveTimeBtn" class="green-button">保存</button>
+    <button id="cancelTimeBtn">キャンセル</button>
+  </div>
+</div>
+
+<div class="section">
+  <label for="plannedExitTimeInput">退店予定時刻（任意）</label>
+  <input type="time" id="plannedExitTimeInput" />
+  <div class="time-buttons">
+    <button id="saveExitBtn" class="green-button">保存</button>
+    <button id="clearExitBtn">クリア</button>
+  </div>
+</div>
+
+<div id="menuSection">
+  <!-- メニューはJSで動的生成 --></div>
+
+<div id="warning"></div>
+<div style="margin-top:16px;">
+  <label><input type="radio" name="taxMode" value="external" checked /> 外税（10%）</label>
+  <label><input type="radio" name="taxMode" value="internal" /> 内税</label>
+</div>
+<div id="result">合計：--円</div>
+
+<div class="section" style="text-align:center;">
+  <button id="showReceiptBtn">選択中メニュー表示</button>
+  <button id="resetBtn" class="btn-large">🔄 リセット</button>
+</div>
+
+
+<!-- 簡易レシートモーダル -->
+<div id="receiptModal">
+  <div id="receiptContent">
+    <h2>選択メニュー</h2>
+    <div id="receiptItems"></div>
+    <div id="receiptTotal"></div>
+    <button id="receiptCloseBtn" onclick="closeReceiptModal()">閉じる</button>
+  </div>
+</div>
+<script src="main.js"></script>
+</body>
+</html>
