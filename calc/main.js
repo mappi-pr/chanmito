@@ -1,4 +1,4 @@
-  const TAX_RATE = 0.10;
+const TAX_RATE = 0.10;
 
   // メニュー価格
   const MENU_PRICES = {
@@ -133,12 +133,53 @@
     return formatTime(date);
   }
 
+  // --- ここから追加: 時刻判定ユーティリティ ---
+  // 指定日時の深夜0時からの分数を返す
+  function minutesSinceMidnight(date) {
+    return date.getHours() * 60 + date.getMinutes();
+  }
+
+  // 営業時間外チェック（05:00〜12:00 を営業時間外とする）
+  function isWithinClosedPeriod(date) {
+    if (!date || !(date instanceof Date)) return false;
+    const m = minutesSinceMidnight(date);
+    const start = 5 * 60;   // 05:00
+    const end = 12 * 60;    // 12:00
+    return m >= start && m < end;
+  }
+
+  // ラスト入店不可時間帯チェック（22:30〜23:00）
+  function isWithinLateAdmission(date) {
+    if (!date || !(date instanceof Date)) return false;
+    const m = minutesSinceMidnight(date);
+    const start = 22 * 60 + 30; // 22:30
+    const end = 23 * 60;        // 23:00
+    return m >= start && m < end;
+  }
+  // --- ここまで追加 ---
+
   // 入店ボタン押下時の処理
   document.getElementById('enterBtn').addEventListener('click', () => {
-    startTime = new Date();
-    document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
-    calculateAndDisplay();
-    startStayTimer();
+	const now = new Date();
+	const warningEl = document.getElementById('warning');
+
+	// 営業時間外チェック（05:00〜12:00）
+	if (isWithinClosedPeriod(now)) {
+		warningEl.textContent = '05:00〜12:00は営業時間外のため入店できません。';
+		return;
+	}
+
+	// 既存：ラストオーダー時間帯チェック（22:30〜23:00）
+	if (isWithinLateAdmission(now)) {
+		warningEl.textContent = '22:30〜23:00はラストオーダー超過のため入店できません。';
+		return;
+	}
+
+	startTime = now;
+	warningEl.textContent = ''; // 警告クリア
+	document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
+	calculateAndDisplay();
+	startStayTimer();
   });
 
   // 時刻編集ボタン押下
@@ -157,16 +198,28 @@
 
   // 時刻保存
   document.getElementById('saveTimeBtn').addEventListener('click', () => {
-    const val = document.getElementById('manualTimeInput').value;
-    if (!val) return alert('時刻を入力してください。');
-    const [hh, mm] = val.split(':').map(Number);
-    if (isNaN(hh) || isNaN(mm)) return alert('正しい時刻を入力してください。');
-    const now = new Date();
-    const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm);
-    startTime = dt;
-    document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
-    document.getElementById('editTimeSection').style.display = 'none';
-    calculateAndDisplay();
+	const val = document.getElementById('manualTimeInput').value;
+	if (!val) return alert('時刻を入力してください。');
+	const [hh, mm] = val.split(':').map(Number);
+	if (isNaN(hh) || isNaN(mm)) return alert('正しい時刻を入力してください。');
+	const nowDate = new Date();
+	const dt = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hh, mm);
+
+	// 営業時間外チェック
+	if (isWithinClosedPeriod(dt)) {
+		alert('05:00〜12:00は営業時間外のため入店できません。別の時刻を指定してください。');
+		return;
+	}
+	// ラストオーダー時間帯チェック
+	if (isWithinLateAdmission(dt)) {
+		alert('22:30〜23:00はラストオーダー超過のため入店できません。別の時刻を指定してください。');
+		return;
+	}
+
+	startTime = dt;
+	document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
+	document.getElementById('editTimeSection').style.display = 'none';
+	calculateAndDisplay();
   });
 
   // 時刻編集キャンセル
@@ -189,13 +242,20 @@
     }
 
     const now = new Date();
-    plannedExitTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm);
+    let candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm);
 
     // 入店時刻より前になってしまった場合は翌日に調整
-    if (plannedExitTime < startTime) {
-      plannedExitTime.setDate(plannedExitTime.getDate() + 1);
+    if (candidate < startTime) {
+      candidate.setDate(candidate.getDate() + 1);
     }
 
+    // 営業時間外チェック（退店予定が営業時間外なら拒否）
+    if (isWithinClosedPeriod(candidate)) {
+      alert('退店予定時刻が05:00〜12:00の営業時間外に該当します。別の時刻を指定してください。');
+      return;
+    }
+
+    plannedExitTime = candidate;
     // ★ 追加：滞在時間・延長分・最低料金を即計算
     calculateAndDisplay();
   });
