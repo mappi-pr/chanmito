@@ -33,6 +33,27 @@ const TAX_RATE = 0.10;
   // 退店予定時間
   let plannedExitTime = null;
 
+  // --- 警告表示管理（重複防止） ---
+  let closedNotice = '';
+  let shortageNotice = '';
+
+  // 営業時間外表示文（定数化して場所ごとの差を明確に）
+  const CLOSED_NOTICE_ENTER = '※05:00〜12:00は営業時間外です（シミュレーションとして入店を許可）。';
+  const CLOSED_NOTICE_SPECIFIED = '※指定時刻は05:00〜12:00の営業時間外です（シミュレーションとして設定）。';
+
+  function renderWarning() {
+    const warningEl = document.getElementById('warning');
+    if (!warningEl) return;
+    warningEl.textContent = [closedNotice, shortageNotice].filter(Boolean).join(' ');
+  }
+
+  function setClosedNotice(msg) { closedNotice = msg || ''; renderWarning(); }
+  function clearClosedNotice() { closedNotice = ''; renderWarning(); }
+  // ショートネスをセット（closedNotice は消さない。両方表示する）
+  function setShortageNotice(msg) { shortageNotice = msg || ''; renderWarning(); }
+  function clearShortageNotice() { shortageNotice = ''; renderWarning(); }
+  // --- ここまで追加 ---
+
   // メニューUI生成
   function generateMenuUI() {
     const container = document.getElementById('menuSection');
@@ -161,104 +182,110 @@ const TAX_RATE = 0.10;
   // 入店ボタン押下時の処理
   document.getElementById('enterBtn').addEventListener('click', () => {
 	const now = new Date();
-	const warningEl = document.getElementById('warning');
 
-	// 営業時間外チェック（05:00〜12:00）
+	// 営業時間外チェック（05:00〜12:00） → 重複しないよう closedNotice を設定
 	if (isWithinClosedPeriod(now)) {
-		warningEl.textContent = '05:00〜12:00は営業時間外のため入店できません。';
-		return;
+		setClosedNotice(CLOSED_NOTICE_ENTER);
+	} else {
+		clearClosedNotice();
 	}
 
-	// 既存：ラストオーダー時間帯チェック（22:30〜23:00）
+	// ラストオーダー時間帯チェック（22:30〜23:00） → ブロックするエラーは shortageNotice として出し全体を上書き
 	if (isWithinLateAdmission(now)) {
-		warningEl.textContent = '22:30〜23:00はラストオーダー超過のため入店できません。';
+		setClosedNotice('');
+		setShortageNotice('22:30〜23:00はラストオーダー超過のため入店できません。');
 		return;
 	}
 
 	startTime = now;
-	warningEl.textContent = ''; // 警告クリア
-	document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
-	calculateAndDisplay();
-	startStayTimer();
-  });
+	clearShortageNotice(); // 入店成功時は不足メッセージをクリア
+ 	document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
+ 	calculateAndDisplay();
+ 	startStayTimer();
+   });
 
-  // 時刻編集ボタン押下
-  document.getElementById('editTimeBtn').addEventListener('click', () => {
-    const warningEl = document.getElementById('warning');
-
+   // 時刻編集ボタン押下
+   document.getElementById('editTimeBtn').addEventListener('click', () => {
     if (!startTime) {
-      warningEl.textContent = 'まず入店時刻を登録してください。';
+      // 優先で表示したいメッセージは shortageNotice としてセット（完全に上書き）
+      setClosedNotice('');
+      setShortageNotice('まず入店時刻を登録してください。');
       return;
     } else {
-      warningEl.textContent = ''; // 警告クリア
+      clearClosedNotice();
+      clearShortageNotice();
     }
-    document.getElementById('manualTimeInput').value = formatTimeForInput(startTime);
-    document.getElementById('editTimeSection').style.display = 'block';
-  });
+     document.getElementById('manualTimeInput').value = formatTimeForInput(startTime);
+     document.getElementById('editTimeSection').style.display = 'block';
+   });
 
-  // 時刻保存
-  document.getElementById('saveTimeBtn').addEventListener('click', () => {
-	const val = document.getElementById('manualTimeInput').value;
-	if (!val) return alert('時刻を入力してください。');
-	const [hh, mm] = val.split(':').map(Number);
-	if (isNaN(hh) || isNaN(mm)) return alert('正しい時刻を入力してください。');
-	const nowDate = new Date();
-	const dt = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hh, mm);
+   // 時刻保存
+   document.getElementById('saveTimeBtn').addEventListener('click', () => {
+ 	const val = document.getElementById('manualTimeInput').value;
+ 	if (!val) return alert('時刻を入力してください。');
+ 	const [hh, mm] = val.split(':').map(Number);
+ 	if (isNaN(hh) || isNaN(mm)) return alert('正しい時刻を入力してください。');
+ 	const nowDate = new Date();
+ 	const dt = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hh, mm);
 
-	// 営業時間外チェック
-	if (isWithinClosedPeriod(dt)) {
-		alert('05:00〜12:00は営業時間外のため入店できません。別の時刻を指定してください。');
-		return;
-	}
-	// ラストオーダー時間帯チェック
-	if (isWithinLateAdmission(dt)) {
-		alert('22:30〜23:00はラストオーダー超過のため入店できません。別の時刻を指定してください。');
-		return;
-	}
+ 	// 営業時間外チェック：手動設定では不可（警告のみではなくブロック）
+ 	// 注意：ここはブロック（アラート）しており、closedNotice を設定しない実装です。
+ 	if (isWithinClosedPeriod(dt)) {
+ 		alert('指定された時刻は05:00〜12:00の営業時間外です。別の時刻を指定してください。');
+ 		return;
+ 	} else {
+ 		clearClosedNotice();
+ 	}
+ 	// ラストオーダー時間帯チェック（従来どおりブロック）
+ 	if (isWithinLateAdmission(dt)) {
+ 		alert('22:30〜23:00はラストオーダー超過のため入店できません。別の時刻を指定してください。');
+ 		return;
+ 	}
 
-	startTime = dt;
-	document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
-	document.getElementById('editTimeSection').style.display = 'none';
-	calculateAndDisplay();
-  });
+ 	startTime = dt;
+ 	document.getElementById('startTimeDisplay').textContent = formatTime(startTime);
+ 	document.getElementById('editTimeSection').style.display = 'none';
+ 	calculateAndDisplay();
+   });
 
-  // 時刻編集キャンセル
-  document.getElementById('cancelTimeBtn').addEventListener('click', () => {
-    document.getElementById('editTimeSection').style.display = 'none';
-  });
+   // 時刻編集キャンセル
+   document.getElementById('cancelTimeBtn').addEventListener('click', () => {
+     document.getElementById('editTimeSection').style.display = 'none';
+   });
 
-  // 退店予定時刻保存
-  document.getElementById('saveExitBtn').addEventListener('click', () => {
-    const val = document.getElementById('plannedExitTimeInput').value;
-    if (!val) {
-      alert('退店予定時刻を入力してください。');
-      return;
-    }
+   // 退店予定時刻保存
+   document.getElementById('saveExitBtn').addEventListener('click', () => {
+     const val = document.getElementById('plannedExitTimeInput').value;
+     if (!val) {
+       alert('退店予定時刻を入力してください。');
+       return;
+     }
 
-    const [hh, mm] = val.split(':').map(Number);
-    if (isNaN(hh) || isNaN(mm)) {
-      alert('正しい時刻を入力してください。');
-      return;
-    }
+     const [hh, mm] = val.split(':').map(Number);
+     if (isNaN(hh) || isNaN(mm)) {
+       alert('正しい時刻を入力してください。');
+       return;
+     }
 
-    const now = new Date();
-    let candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm);
+     const now = new Date();
+     let candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm);
 
-    // 入店時刻より前になってしまった場合は翌日に調整
-    if (candidate < startTime) {
-      candidate.setDate(candidate.getDate() + 1);
-    }
+     // 入店時刻より前になってしまった場合は翌日に調整
+     if (candidate < startTime) {
+       candidate.setDate(candidate.getDate() + 1);
+     }
 
-    // 営業時間外チェック（退店予定が営業時間外なら拒否）
+     // 営業時間外チェック（退店予定が営業時間外なら警告表示のみに変更）
     if (isWithinClosedPeriod(candidate)) {
-      alert('退店予定時刻が05:00〜12:00の営業時間外に該当します。別の時刻を指定してください。');
-      return;
+      setClosedNotice(CLOSED_NOTICE_SPECIFIED);
+    } else {
+      clearClosedNotice();
     }
 
-    plannedExitTime = candidate;
-    // ★ 追加：滞在時間・延長分・最低料金を即計算
-    calculateAndDisplay();
-  });
+     plannedExitTime = candidate;
+     // ★ 追加：滞在時間・延長分・最低料金を即計算
+     calculateAndDisplay();
+   });
 
 
   // 退店予定時刻クリア
@@ -269,19 +296,21 @@ const TAX_RATE = 0.10;
 
   // 消費税モード切替時
   document.querySelectorAll('input[name="taxMode"]').forEach(radio => {
-    radio.addEventListener('change', () => {
-      calculateAndDisplay();
-    });
-  });
+     radio.addEventListener('change', () => {
+       calculateAndDisplay();
+     });
+   });
 
-  // 合計計算・表示
-  function calculateAndDisplay() {
-    if (!startTime) {
+   // 合計計算・表示
+   function calculateAndDisplay() {
+     if (!startTime) {
       document.getElementById('result').textContent = '合計：--円';
       document.getElementById('stayMinutes').textContent = '0';
-      document.getElementById('warning').textContent = '';
-      return;
-    }
+      // startTime 未設定時は全ての警告をクリア
+      clearClosedNotice();
+      clearShortageNotice();
+       return;
+     }
 
     // ▶ 滞在時間計算（退店予定があればそちらを優先）
     let now = new Date();
@@ -341,34 +370,30 @@ const TAX_RATE = 0.10;
     const forcedOrPrice = Math.min(baseDrinkMinPrice, baseAmuseMinPrice) * orShortageCount;
 
     // ===== 警告表示 =====
-    const warningEl = document.getElementById('warning');
-    if (drinkShortage > 0 || amuseShortage > 0 || orShortageCount > 0) {
-      let msg = '';
-      if (drinkShortage > 0 || amuseShortage > 0) {
-        msg += `入店時の必須オーダー（1ドリンク＋1アミュ）が不足しています。`;
-      }
-      if (orShortageCount > 0) {
-        msg += ` 延長分のドリンク/アミュが不足しています（不足 ${orShortageCount}件）。`;
-      }
-      warningEl.textContent = msg;
-    } else {
-      warningEl.textContent = '';
+    // 不足メッセージは shortageNotice にセット（閉店注意は closedNotice 側で保持）
+    let shortageMsg = '';
+    if (drinkShortage > 0 || amuseShortage > 0) {
+      shortageMsg += `入店時の必須オーダー（1ドリンク＋1アミュ）が不足しています。`;
     }
-
-    // ===== 小計・合計計算（日本の消費税ルール） =====
-    const taxMode = document.querySelector('input[name="taxMode"]:checked').value;
-    let subTotal = chargeTotal + menuTotal + forcedDrinkPrice + forcedAmusePrice + forcedOrPrice;
-    let tax = 0;
-    let total = subTotal;
-
-    if (taxMode === 'external') {
-      tax = Math.round(subTotal * TAX_RATE);
-      total = subTotal + tax;
+    if (orShortageCount > 0) {
+      shortageMsg += ` 延長分のドリンク/アミュが不足しています（不足 ${orShortageCount}件）。`;
     }
+    if (shortageMsg) setShortageNotice(shortageMsg); else clearShortageNotice();
 
-    // ===== 表示 =====
-    document.getElementById('result').textContent = `合計：${total.toLocaleString()}円`;
-  }
+     // ===== 小計・合計計算（日本の消費税ルール） =====
+     const taxMode = document.querySelector('input[name="taxMode"]:checked').value;
+     let subTotal = chargeTotal + menuTotal + forcedDrinkPrice + forcedAmusePrice + forcedOrPrice;
+     let tax = 0;
+     let total = subTotal;
+
+     if (taxMode === 'external') {
+       tax = Math.round(subTotal * TAX_RATE);
+       total = subTotal + tax;
+     }
+
+     // ===== 表示 =====
+     document.getElementById('result').textContent = `合計：${total.toLocaleString()}円`;
+   }
 
   // 滞在時間更新タイマー（1分ごと）
   let stayTimer = null;
@@ -379,16 +404,17 @@ const TAX_RATE = 0.10;
 
   // 簡易レシートモーダル表示
   document.getElementById('showReceiptBtn').addEventListener('click', () => {
-    const warningEl = document.getElementById('warning');
-
     if (!startTime) {
-      warningEl.textContent = 'まず入店時刻を登録してください。';
+      // 完全上書きでエラー表示
+      setClosedNotice('');
+      setShortageNotice('まず入店時刻を登録してください。');
       return;
     } else {
-      warningEl.textContent = ''; // 警告クリア
+      // レシート表示時は不足系はクリア（営業時間外の注意は残す）
+      clearShortageNotice();
       showReceiptModal();
     }
-  });
+   });
 
   document.getElementById('receiptCloseBtn').addEventListener('click', () => {
     closeReceiptModal();
