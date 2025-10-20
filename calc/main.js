@@ -38,8 +38,8 @@ const TAX_RATE = 0.10;
   let shortageNotice = '';
 
   // 営業時間外表示文（定数化して場所ごとの差を明確に）
-  const CLOSED_NOTICE_ENTER = '※05:00〜12:00は営業時間外です（シミュレーションとして入店を許可）。';
-  const CLOSED_NOTICE_SPECIFIED = '※指定時刻は05:00〜12:00の営業時間外です（シミュレーションとして設定）。';
+  const CLOSED_NOTICE_ENTER = '※05:00〜12:00は営業時間外です。';
+  const CLOSED_NOTICE_SPECIFIED = '※指定時刻は05:00〜12:00の営業時間外です。';
 
   function renderWarning() {
     const warningEl = document.getElementById('warning');
